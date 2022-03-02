@@ -24,6 +24,7 @@ class WPGraphQL_CoAuthorsPlus {
 	private $fields = array(
 		'bio' => 'description',
 		'email' => 'user_email',
+		'displayName' => 'display_name',
 		'firstName' => 'first_name',
 		'lastName' => 'last_name',
 		'registeredDate' => 'user_registered',
