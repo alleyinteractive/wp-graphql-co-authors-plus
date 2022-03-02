@@ -2,16 +2,13 @@
 /**
  * Plugin Name: GraphQL integration with Co-Authors Plus
  * Author: WPGraphQL
- * Version: 0.0.2
- * Requires at least: 4.7.0
+ * Version: 0.1.0
+ * Requires at least: 5.0.0
  *
- * @package WPGraphQL_CoAuthorsPlus
+ * @package wp-graphql-co-authors-plus
  */
 
-namespace WPGraphQL;
-
-use GraphQL\Type\Definition\ResolveInfo;
-use WPGraphQL;
+namespace WPGraphQL\Plugin\CoAuthorsPlus;
 
 /**
  * GraphQL integration with Co-Authors Plus
@@ -25,12 +22,11 @@ class WPGraphQL_CoAuthorsPlus {
 	 * @var array
 	 */
 	private $fields = array(
+		'bio' => 'description',
 		'email' => 'user_email',
 		'firstName' => 'first_name',
 		'lastName' => 'last_name',
-		'name' => 'display_name',
 		'registeredDate' => 'user_registered',
-		'slug' => 'user_nicename',
 		'type' => 'type',
 		'url' => 'user_url',
 		'username' => 'user_login',
@@ -62,34 +58,31 @@ class WPGraphQL_CoAuthorsPlus {
 	 * Hook into GraphQL actions and filters.
 	 *
 	 * @return void
-	 * @since 0.0.1
 	 */
 	public function init() {
-		add_filter( 'graphql_coAuthor_fields', array( $this, 'add_fields' ), 10, 1 );
+		add_action( 'graphql_register_types', array( $this, 'register_fields' ), 10, 0 );
 		add_filter( 'graphql_term_object_connection_query_args', array( $this, 'set_default_args' ), 10, 3 );
 	}
 
 	/**
 	 * Add additional fields to resolve on the coAuthor type.
 	 *
-	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
-	 * @param  array $fields Fields defined on the coAuthor type.
-	 * @return array
-	 * @since 0.0.1
+	 * @return void
 	 */
-	public function add_fields( $fields ) {
-		// Define the fields on the Co-Authors type. This should constitute all of
-		// the fields we can pull off of a default implementation of Co-Authors
-		// Plus. Use the `graphql_coAuthor_fields` filter to define your own.
+	public function register_fields() {
 		foreach ( $this->fields as $name => $field ) {
-			$fields [ $name ] = array(
-				'type'        => Types::string(),
-				'description' => __( sprintf( 'The %s of the author', $field ), $this->textdomain ),
-				'resolve'     => array( $this, 'resolve_user_field' ),
+			register_graphql_field(
+				'CoAuthor',
+				$name,
+				[
+					'type'        => 'String',
+					'description' => __( sprintf( 'The %s of the author', $field ), $this->textdomain ),
+					'resolve'     => function ( $term ) use ( $field ) {
+						return $this->resolve_user_field( $term, $field );
+					},
+				]
 			);
 		}
-
-		return $fields;
 	}
 
 	/**
@@ -100,7 +93,6 @@ class WPGraphQL_CoAuthorsPlus {
 	 * @param  WP_Post $source     Connection source (post object).
 	 * @param  array   $args       Input args.
 	 * @return array
-	 * @since 0.0.2
 	 */
 	public function set_default_args( $query_args, $source, $args ) {
 		if ( ! isset( $query_args['taxonomy'] ) || $this->tax_name !== $query_args['taxonomy'] ) {
@@ -126,7 +118,6 @@ class WPGraphQL_CoAuthorsPlus {
 	 * @param string $slug User slug / nicename to look up by.
 	 *
 	 * @return WP_User|object
-	 * @since 0.0.1
 	 */
 	public function get_coauthor_by_slug( $slug ) {
 		global $coauthors_plus;
@@ -139,23 +130,21 @@ class WPGraphQL_CoAuthorsPlus {
 	 * on the user object.
 	 *
 	 * @SuppressWarnings(PHPMD.UnusedFormalParameter)
-	 * @param  \WP_Term    $term    Co-author taxonomy term.
-	 * @param  array       $args    Query args.
-	 * @param  AppContext  $context AppContext object.
-	 * @param  ResolveInfo $info    ResolveInfo object.
+	 * @param  WPGraphQL\Model\Term $term     Co-author taxonomy term.
+	 * @param  string               $wp_field Field name.
 	 * @return string
-	 * @since 0.0.1
 	 */
-	public function resolve_user_field( \WP_Term $term, $args, AppContext $context, ResolveInfo $info ) {
+	public function resolve_user_field( $term, $wp_field ) {
 		$author = $this->get_coauthor_by_slug( $term->slug );
-
-		// Get the requested field name from the ResolveInfo object, then look up
-		// which user field it maps to.
-		$wp_field = $this->fields[ $info->fieldName ];
 
 		// First look directly on the object.
 		if ( isset( $author->$wp_field ) ) {
 			return $author->$wp_field;
+		}
+
+		// Next, look on the term object.
+		if ( isset( $author->data->$wp_field ) ) {
+			return $author->data->$wp_field;
 		}
 
 		// Next look in user meta.
@@ -173,7 +162,6 @@ class WPGraphQL_CoAuthorsPlus {
 	 * @param string $taxonomy Taxonomy name.
 	 *
 	 * @return array
-	 * @since 0.0.1
 	 */
 	public function update_taxonomy_args( $args, $taxonomy ) {
 		if ( $this->tax_name === $taxonomy ) {
@@ -187,4 +175,4 @@ class WPGraphQL_CoAuthorsPlus {
 }
 
 // Instantiate the class.
-new \WPGraphQL\WPGraphQL_CoAuthorsPlus();
+new WPGraphQL_CoAuthorsPlus();
